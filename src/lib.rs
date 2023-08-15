@@ -551,9 +551,11 @@ impl Contract {
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
     use std::convert::TryInto;
 
+    use crate::access_control::members::{MemberMetadata, VersionedMemberMetadata};
+    use crate::community::CommunityInputs;
     use crate::post::PostBody;
     use near_sdk::test_utils::{get_created_receipts, VMContextBuilder};
     use near_sdk::{testing_env, MockedBlockchain, VMContext};
@@ -570,7 +572,7 @@ mod tests {
 
     #[test]
     pub fn test_add_post_with_mention() {
-        let context = get_context(false);
+        let context: VMContext = get_context(false);
         testing_env!(context);
         let mut contract = Contract::new();
 
@@ -616,4 +618,177 @@ mod tests {
             assert_eq!("{\"data\":{\"bob.near\":{\"index\":{\"notify\":\"[{\\\"key\\\":\\\"petersalomonsen.near\\\",\\\"value\\\":{\\\"type\\\":\\\"devgovgigs/mention\\\",\\\"post\\\":0}},{\\\"key\\\":\\\"psalomo.near.\\\",\\\"value\\\":{\\\"type\\\":\\\"devgovgigs/mention\\\",\\\"post\\\":0}}]\"}}}}", args);
         }
     }
+
+    #[test]
+    #[should_panic]
+    pub fn test_create_community_unique_handle() {
+        let context: VMContext = get_context(false);
+        testing_env!(context);
+        let mut contract = Contract::new();
+        let handle = "new-community".to_string();
+        // let handle2 = "new-community2".to_string();
+        contract.create_community({
+            CommunityInputs {
+                handle: handle.clone(),
+                name: "new-community".to_string(),
+                tag: "new-community".to_string(),
+                description: "description".to_string(),
+                logo_url: "".to_string(),
+                banner_url: "".to_string(),
+                bio_markdown: Some("length of 3 min".to_string()),
+            }
+        });
+        // Can't make a second with the same handle
+        contract.create_community({
+            CommunityInputs {
+                handle: handle.clone(),
+                name: "new-community".to_string(),
+                tag: "new-community".to_string(),
+                description: "description".to_string(),
+                logo_url: "".to_string(),
+                banner_url: "".to_string(),
+                bio_markdown: Some("length of 3 min".to_string()),
+            }
+        });
+    }
+
+    #[test]
+    pub fn test_create_two_communities_unique_handle() {
+        let context: VMContext = get_context(false);
+        testing_env!(context);
+        let mut contract = Contract::new();
+        let handle = "new-community".to_string();
+        let unique_handle = "new-community2".to_string();
+        contract.create_community({
+            CommunityInputs {
+                handle: handle.clone(),
+                name: "new-community".to_string(),
+                tag: "new-community".to_string(),
+                description: "description".to_string(),
+                logo_url: "".to_string(),
+                banner_url: "".to_string(),
+                bio_markdown: Some("bio".to_string()),
+            }
+        });
+        // Can make a second with an unique handle
+        contract.create_community({
+            CommunityInputs {
+                handle: unique_handle,
+                name: "new-community".to_string(),
+                tag: "new-community".to_string(),
+                description: "description".to_string(),
+                logo_url: "".to_string(),
+                banner_url: "".to_string(),
+                bio_markdown: Some("bio".to_string()),
+            }
+        });
+    }
+
+    #[test]
+    pub fn test_relationship_communities_projects() {
+        // @ailisp this seems to be a one-to-many relationship not many-to-many
+        // one board to many community
+        let context: VMContext = get_context(false);
+        testing_env!(context);
+        let mut contract = Contract::new();
+        let handle = "new-community".to_string();
+        let unique_handle = "new-community2".to_string();
+        contract.create_community({
+            CommunityInputs {
+                handle: handle.clone(),
+                name: "new-community".to_string(),
+                tag: "new-community".to_string(),
+                description: "description".to_string(),
+                logo_url: "".to_string(),
+                banner_url: "".to_string(),
+                bio_markdown: Some("bio".to_string()),
+            }
+        });
+        // Can make a second with an unique handle
+        contract.create_community({
+            CommunityInputs {
+                handle: unique_handle.clone(),
+                name: "new-community".to_string(),
+                tag: "new-community".to_string(),
+                description: "description".to_string(),
+                logo_url: "".to_string(),
+                banner_url: "".to_string(),
+                bio_markdown: Some("bio".to_string()),
+            }
+        });
+        // "board" is a json stringified form object
+        contract.update_community_board(handle.clone(), Some("board".to_string()));
+        contract.update_community_board(unique_handle.clone(), Some("board".to_string()));
+
+        let community1 = contract.get_community(handle.clone()).unwrap();
+        let community2 = contract.get_community(unique_handle.clone()).unwrap();
+
+        assert_eq!(community1.board, Some("board".to_string()));
+        assert_eq!(community1.board, community2.board);
+    }
+
+    #[test]
+    pub fn test_relationship_project_and_project_view() {
+        // one project to many views
+        let context: VMContext = get_context(false);
+        testing_env!(context);
+        let mut contract = Contract::new();
+
+        // Project view is a json string which shouldn't be tested on neardevhub-contract side
+    }
+
+    #[test]
+    pub fn test_permissions() {
+        let context: VMContext = get_context(false);
+        testing_env!(context);
+        let mut contract = Contract::new();
+    }
+
+    #[test]
+    pub fn test_update_without_breaking_relations() {
+        let context: VMContext = get_context(false);
+        testing_env!(context);
+        let mut contract = Contract::new();
+    }
+
+    #[test]
+    pub fn test_delete_without_breaking_relations() {
+        let context: VMContext = get_context(false);
+        testing_env!(context);
+        let mut contract = Contract::new();
+    }
+
+    #[test]
+    pub fn test_has_moderator() {
+        let context: VMContext = get_context(false);
+        testing_env!(context);
+        let mut contract = Contract::new();
+        contract
+    }
+
+    #[test]
+    pub fn test_get_account_community_permissions() {
+        let context: VMContext = get_context(false);
+        testing_env!(context);
+        let mut contract = Contract::new();
+
+        contract.add_member(
+            crate::access_control::members::Member::Account("thomasguntenaar.near".to_string()),
+            VersionedMemberMetadata::V0(MemberMetadata {
+                description: "thomas is a moderator".to_string(),
+                permissions: HashMap::new(),
+                children: HashSet::new(),
+                parents: HashSet::new(),
+            }),
+        );
+        // contract.get_account_community_permissions();
+    }
+
+    // #[test]
+    // pub fn test_add_like(&mut self) {
+    //   let context = get_context(false);
+    //   testing_env!(context);
+    //   let mut contract = Contract::new();
+
+    // }
 }
