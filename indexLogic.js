@@ -16,12 +16,12 @@ async function getBlock(block: Block) {
   const devhubOps = getDevHubOps(block);
 
   if (devhubOps.length > 0) {
-    const authorToPostId = buildAuthorToPostIdMap(block);
+    const authorToProposalId = buildAuthorToProposalIdMap(block);
     const blockHeight = block.blockHeight;
     const blockTimestamp = block.header().timestampNanosec;
     await Promise.all(
       devhubOps.map((op) =>
-        indexOp(op, authorToPostId, blockHeight, blockTimestamp, context)
+        indexOp(op, authorToProposalId, blockHeight, blockTimestamp, context)
       )
     );
   }
@@ -40,7 +40,7 @@ function base64toHex(encodedValue) {
 function getDevHubOps(block) {
   return block
     .actions()
-    .filter((action) => action.receiverId === "devgovgigs.near")
+    .filter((action) => action.receiverId === "devhub.near")
     .flatMap((action) =>
       action.operations
         .filter((operation) => operation["FunctionCall"])
@@ -54,9 +54,9 @@ function getDevHubOps(block) {
         }))
         .filter(
           (operation) =>
-            operation.methodName === "add_post" ||
-            operation.methodName === "edit_post" ||
-            operation.methodName === "add_like"
+            operation.methodName === "add_proposal" ||
+            operation.methodName === "edit_proposal" ||
+            operation.methodName === "edit_proposal_timeline"
         )
         .map((functionCallOperation) => ({
           ...functionCallOperation,
@@ -66,33 +66,51 @@ function getDevHubOps(block) {
     );
 }
 
-function buildAuthorToPostIdMap(block) {
+// Borsch
+function buildAuthorToProposalIdMap(block) {
+  console.log({ block });
   const stateChanges = block.streamerMessage.shards
     .flatMap((e) => e.stateChanges)
     .filter(
       (stateChange) =>
-        stateChange.change.accountId === "devgovgigs.near" &&
+        // stateChange.change.accountId === "devhub.near" &&
         stateChange.type === "data_update"
     );
-  const addOrEditPost = stateChanges
+  console.log({ stateChanges });
+  console.log({
+    hex: stateChanges.map((s) => base64toHex(s.change.keyBase64)),
+  });
+  const addOrEditProposal = stateChanges
     .map((stateChange) => stateChange.change)
-    .filter((change) => base64toHex(change.keyBase64).startsWith("05"))
+    // ?? 14th 0x0e ipv 0x05
+    .filter((change) => base64toHex(change.keyBase64).startsWith("0e"))
     .map((c) => ({
       k: Buffer.from(c.keyBase64, "base64"),
       v: Buffer.from(c.valueBase64, "base64"),
     }));
-  const authorToPostId = Object.fromEntries(
-    addOrEditPost.map((kv) => [
-      kv.v.slice(13, 13 + kv.v.slice(9, 13).readUInt32LE()).toString("utf-8"),
-      Number(kv.k.slice(1).readBigUInt64LE()),
-    ])
+  console.log({ addOrEditProposal });
+
+  console.log({
+    proposalId: addOrEditProposal[0].k.slice(1).readBigUInt64LE(),
+  });
+
+  const authorToProposalId = Object.fromEntries(
+    addOrEditProposal.map((kv) => {
+      return [
+        // Author not the author
+        kv.v.slice(13, 13 + kv.v.slice(9, 13).readUInt32LE()).toString("utf-8"),
+        // ProposalId
+        Number(kv.k.slice(1).readBigUInt64LE()),
+      ];
+    })
   );
-  return authorToPostId;
+  // console.log({ authorToProposalId });
+  return authorToProposalId;
 }
 
 async function indexOp(
   op,
-  authorToPostId,
+  authorToProposalId,
   blockHeight,
   blockTimestamp,
   context
@@ -100,12 +118,11 @@ async function indexOp(
   let receipt_id = op.receiptId;
   let caller = op.caller;
   let args = op.args;
-  let post_id = authorToPostId[op.caller] ?? null;
+  console.log(`Indexing ${op.methodName} by ${caller} at ${blockHeight}`);
+  console.log(authorToProposalId);
+  let proposal_id = authorToProposalId[caller] ?? null;
   let method_name = op.methodName;
 
-  if (method_name == "add_like") {
-    post_id = args.post_id;
-  }
   let err = await createDump(context, {
     receipt_id,
     method_name,
@@ -113,67 +130,73 @@ async function indexOp(
     block_timestamp: blockTimestamp,
     args: JSON.stringify(args),
     caller,
-    post_id,
+    proposal_id,
   });
   if (err !== null) {
     return;
   }
 
   // currently Query API cannot tell if it's a failed receipt, so we estimate by looking the state changes.
-  if (post_id === null) {
+  if (proposal_id === null) {
     console.log(
       `Receipt to ${method_name} with receipt_id ${receipt_id} at ${blockHeight} doesn't result in a state change, it's probably a failed receipt, please check`
     );
     return;
   }
 
-  if (method_name === "add_like") {
-    let like = {
-      post_id,
-      author_id: caller,
-      ts: blockTimestamp,
-    };
-    await createLike(context, like);
-    return;
-  }
-
-  if (method_name === "add_post") {
-    let parent_id = args.parent_id;
-
-    let post = {
-      id: post_id,
-      parent_id,
+  if (method_name === "add_proposal") {
+    let proposal = {
+      id: proposal_id,
       author_id: caller,
     };
-    let err = await createPost(context, post);
+    let err = await createProposal(context, proposal);
     if (err !== null) {
       return;
     }
   }
 
-  if (method_name === "add_post" || method_name === "edit_post") {
+  if (
+    method_name === "add_proposal" ||
+    method_name === "edit_proposal" ||
+    method_name === "edit_proposal_timeline"
+  ) {
+    // editor_id
     let labels = args.labels;
-    let post_type = args.body.post_type;
-    let description = args.body.description;
+    // timestamp
+    // body
     let name = args.body.name;
-    let sponsorship_token = args.body.sponsorship_token;
-    let sponsorship_amount = args.body.amount;
-    let sponsorship_supervisor = args.body.supervisor;
+    let category = args.body.category;
+    let summary = args.body.summary;
+    let description = args.body.description;
+    let linked_proposals = args.body.linked_proposals;
+    let requested_sponsorship_usd_amount =
+      args.body.requested_sponsorship_usd_amount;
+    let requested_sponsorship_paid_in_currency =
+      args.body.requested_sponsorship_paid_in_currency;
+    let requested_sponsor = args.body.requested_sponsor;
+    let receiver_account = args.body.receiver_account;
+    let supervisor = args.body.supervisor;
+    let timeline = args.body.timeline;
 
-    let post_snapshot = {
-      post_id,
+    let proposal_snapshot = {
+      proposal_id,
       block_height: blockHeight,
-      ts: blockTimestamp,
+      ts: blockTimestamp, // Timestamp ??
       editor_id: caller,
       labels,
-      post_type,
-      description,
       name,
-      sponsorship_token,
-      sponsorship_amount,
-      sponsorship_supervisor,
+      category,
+      summary,
+      description,
+      linked_proposals,
+      requested_sponsorship_usd_amount, // u32
+      requested_sponsorship_paid_in_currency, // ProposalFundingCurrency
+      requested_sponsor, // AccountId
+      receiver_account, // AccountId
+      supervisor, // Option
+      timeline, // TimelineStatus
     };
-    await createPostSnapshot(context, post_snapshot);
+    await createProposalSnapshot(context, proposal_snapshot);
   }
 }
 
@@ -186,7 +209,7 @@ async function createDump(
     block_timestamp,
     args,
     caller,
-    post_id,
+    proposal_id,
   }
 ) {
   const dump = {
@@ -196,7 +219,7 @@ async function createDump(
     block_timestamp,
     args,
     caller,
-    post_id,
+    proposal_id,
   };
   try {
     console.log("Creating a dump...");
@@ -217,124 +240,102 @@ async function createDump(
       mutationData
     );
     console.log(
-      `Dump ${caller} ${method_name} post ${post_id} has been added to the database`
+      `Dump ${caller} ${method_name} proposal ${proposal_id} has been added to the database`
     );
     return null;
   } catch (e) {
     console.log(
-      `Error creating ${caller} ${method_name} post ${post_id}: ${e}`
+      `Error creating ${caller} ${method_name} proposal ${proposal_id}: ${e}`
     );
     return e;
   }
 }
 
-async function createPost(context, { id, parent_id, author_id }) {
-  const post = { id, parent_id, author_id };
+async function createProposal(context, { id, author_id }) {
+  const proposal = { id, author_id };
   try {
-    console.log("Creating a Post");
+    console.log("Creating a Proposal");
     const mutationData = {
-      post,
+      proposal,
     };
     await context.graphql(
       `
-      mutation CreatePost($post: thomasguntenaar_near_devhub_proposals_alpha_posts_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_alpha_posts_one(object: $post) {id}
+      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_alpha_proposals_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_alpha_proposals_one(object: $proposal) {id}
       }
       `,
       mutationData
     );
-    console.log(`Post ${id} has been added to the database`);
+    console.log(`Proposal ${id} has been added to the database`);
     return null;
   } catch (e) {
-    console.log(`Error creating Post with post_id ${id}: ${e}`);
+    console.log(`Error creating Proposal with id ${id}: ${e}`);
     return e;
   }
 }
 
-async function createPostSnapshot(
+async function createProposalSnapshot(
   context,
   {
-    post_id,
+    proposal_id,
     block_height,
-    ts,
+    ts, // Timestamp ??
     editor_id,
     labels,
-    post_type,
-    description,
     name,
-    sponsorship_token,
-    sponsorship_amount,
-    sponsorship_supervisor,
+    category,
+    summary,
+    description,
+    linked_proposals, // Vec<ProposalId>
+    requested_sponsorship_usd_amount, // u32
+    requested_sponsorship_paid_in_currency, // ProposalFundingCurrency
+    requested_sponsor, // AccountId
+    receiver_account, // AccountId
+    supervisor, // Option
+    timeline, // TimelineStatus
   }
 ) {
-  const post_snapshot = {
-    post_id,
+  const proposal_snapshot = {
+    proposal_id,
     block_height,
     ts,
     editor_id,
     labels,
-    post_type,
-    description,
     name,
-    sponsorship_token: JSON.stringify(sponsorship_token),
-    sponsorship_amount,
-    sponsorship_supervisor,
+    category,
+    summary,
+    description,
+    linked_proposals:
+      linked_proposals && linked_proposals.length
+        ? linked_proposals.join(",")
+        : "", // Vec<ProposalId>
+    requested_sponsorship_usd_amount, // u32
+    requested_sponsorship_paid_in_currency, // ProposalFundingCurrency
+    requested_sponsor, // AccountId
+    receiver_account, // AccountId
+    supervisor, // Option<AccountId>
+    timeline: JSON.stringify(timeline), // TimelineStatus
   };
   try {
-    console.log("Creating a PostSnapshot");
+    console.log("Creating a ProposalSnapshot");
     const mutationData = {
-      post_snapshot,
+      proposal_snapshot,
     };
     await context.graphql(
       `
-      mutation CreatePostSnapshot($post_snapshot: thomasguntenaar_near_devhub_proposals_alpha_post_snapshots_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_alpha_post_snapshots_one(object: $post_snapshot) {post_id, block_height}
+      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_alpha_proposal_snapshots_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_alpha_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
       }
       `,
       mutationData
     );
     console.log(
-      `Post Snapshot with post_id ${post_id} at block_height ${block_height} has been added to the database`
+      `Proposal Snapshot with proposal_id ${proposal_id} at block_height ${block_height} has been added to the database`
     );
     return null;
   } catch (e) {
     console.log(
-      `Error creating Post Snapshot with post_id ${post_id} at block_height ${block_height}: ${e}`
-    );
-    return e;
-  }
-}
-
-async function createLike(context, { post_id, author_id, ts }) {
-  try {
-    console.log("Creating a Like");
-    const mutationData = {
-      author_id,
-      post_id,
-      ts,
-    };
-    await context.graphql(
-      `
-      mutation CreateLike($author_id: String, $post_id: Int, $ts: numeric) {
-        insert_thomasguntenaar_near_devhub_proposals_alpha_likes_one(
-          on_conflict: {constraint: likes_pkey, update_columns: ts, where: {ts: {_lt: $ts}}}
-          object: {post_id: $post_id, ts: $ts, author_id: $author_id}
-        ) {
-          author_id
-          post_id
-          ts
-        }
-      }
-      `,
-      mutationData
-    );
-    console.log(
-      `Like ${post_id} by ${author_id} has been added to the database`
-    );
-    return null;
-  } catch (e) {
-    console.log(
-      `Error creating Like to post_id ${post_id} by ${author_id}: ${e}`
+      `Error creating Proposal Snapshot with proposal_id ${proposal_id} at block_height ${block_height}: ${e}`
     );
     return e;
   }

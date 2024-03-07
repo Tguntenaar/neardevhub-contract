@@ -1,109 +1,101 @@
 CREATE TABLE
-  posts (
+  proposals (
     id serial primary key,
-    -- due to how query api runs, a child post can be processed by the worker before the parent post, so we can't enforce parent_id as foreign key
-    parent_id int,
     author_id VARCHAR not null
   );
 
 CREATE TABLE
-  post_snapshots (
-    -- due to how query api runs, an edit_post can be processed by the worker before corresponding add_post, so we can't enforce post_id as foreign key
-    post_id int,
+  proposal_snapshots (
+    -- due to how query api runs, an edit_proposal can be processed by the worker before corresponding add_proposal, so we can't enforce proposal_id as foreign key
+    proposal_id int,
     block_height bigint,
     ts decimal(20, 0),
     editor_id varchar,
     labels jsonb,
-    post_type varchar,
-    description text,
     "name" text,
-    sponsorship_token varchar,
-    sponsorship_amount decimal,
-    sponsorship_supervisor varchar,
-    primary key (post_id, ts)
+    category varchar,
+    summary text,
+    description text,
+    linked_proposals varchar, -- array of proposal ids "1,2,3,4"
+    requested_sponsorship_usd_amount decimal,
+    requested_sponsorship_paid_in_currency varchar,
+    requested_sponsor varchar,
+    receiver_account varchar,
+    supervisor varchar,
+    timeline jsonb,
+    primary key (proposal_id, ts)
   );
 
 CREATE TABLE
   dumps (
     receipt_id varchar primary key,
+    method_name varchar,
     block_height bigint,
     block_timestamp decimal(20, 0),
-    method_name varchar,
     args varchar,
     caller varchar,
-    post_id bigint
+    proposal_id bigint
   );
 
-create index
-  idx_posts_author_id on posts (author_id);
-
-create index
-  idx_posts_parent_id on posts (parent_id);
+CREATE INDEX
+  idx_proposals_author_id ON proposals (author_id);
 
 CREATE INDEX
-  idx_post_snapshots_post_id ON post_snapshots (post_id);
+  idx_proposal_snapshots_proposal_id ON proposal_snapshots (proposal_id);
 
 CREATE INDEX
-  idx_post_snapshots_ts ON post_snapshots (ts);
+  idx_proposal_snapshots_ts ON proposal_snapshots (ts);
 
 CREATE INDEX
-  idx_post_snapshots_editor_id ON post_snapshots (editor_id);
+  idx_proposal_snapshots_editor_id ON proposal_snapshots (editor_id);
 
 CREATE INDEX
-  idx_post_snapshots_labels ON post_snapshots USING GIN (labels);
+  idx_proposal_snapshots_labels ON proposal_snapshots USING GIN (labels);
 
 CREATE INDEX
-  idx_fulltext_post_snapshots_description ON post_snapshots USING gin (to_tsvector('english', description));
+  idx_fulltext_proposal_snapshots_description ON proposal_snapshots USING gin (to_tsvector('english', description));
 
 CREATE INDEX
-  idx_fulltext_post_snapshots_name ON post_snapshots USING gin (to_tsvector('english', name));
+  idx_fulltext_proposal_snapshots_summary ON proposal_snapshots USING gin (to_tsvector('english', summary));
 
-create index
-  idx_post_snapshots_sponsorship_supervisor on post_snapshots (sponsorship_supervisor);
+CREATE INDEX
+  idx_fulltext_proposal_snapshots_name ON proposal_snapshots USING gin (to_tsvector('english', name));
+
+CREATE INDEX
+  idx_proposal_snapshots_sponsorship_supervisor ON proposal_snapshots (supervisor);
+
+CREATE INDEX
+  idx_proposal_snapshots_sponsorship_receiver_account ON proposal_snapshots (receiver_account);
+
 
 CREATE VIEW
-  posts_with_latest_snapshot AS
+  proposals_with_latest_snapshot AS
 SELECT
-  ps.post_id,
-  p.parent_id,
+  ps.proposal_id,
   p.author_id,
   ps.block_height,
   ps.ts,
   ps.editor_id,
   ps.labels,
-  ps.post_type,
-  ps.description,
   ps.name,
-  ps.sponsorship_token,
-  ps.sponsorship_amount,
-  ps.sponsorship_supervisor
+  ps.description,
+  ps.linked_proposals,
+  ps.requested_sponsorship_usd_amount,
+  ps.requested_sponsorship_paid_in_currency,
+  ps.requested_sponsor,
+  ps.receiver_account,
+  ps.supervisor,
+  ps.timeline
 FROM
-  posts p
+  proposals p
   INNER JOIN (
     SELECT
-      post_id,
+      proposal_id,
       MAX(ts) AS max_ts
     FROM
-      post_snapshots
+      proposal_snapshots
     GROUP BY
-      post_id
-  ) latest_snapshots ON p.id = latest_snapshots.post_id
-  INNER JOIN post_snapshots ps ON latest_snapshots.post_id = ps.post_id
+      proposal_id
+  ) latest_snapshots ON p.id = latest_snapshots.proposal_id
+  INNER JOIN proposal_snapshots ps ON latest_snapshots.proposal_id = ps.proposal_id
   AND latest_snapshots.max_ts = ps.ts;
-
-CREATE TABLE
-  likes (
-    post_id int not null,
-    author_id varchar not null,
-    ts decimal(20, 0) not null,
-    primary key (post_id, author_id)
-  );
-
-create index
-  idx_likes_post_id on likes (post_id);
-
-create index
-  idx_likes_author_id on likes (author_id);
-
-create index
-  idx_likes_ts on likes (ts);
