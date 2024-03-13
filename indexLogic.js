@@ -55,9 +55,9 @@ function getDevHubOps(block) {
         }))
         .filter(
           (operation) =>
-            // operation.methodName === "edit_proposal" ||
+            operation.methodName === "edit_proposal" ||
             operation.methodName === "edit_proposal_internal" ||
-            // operation.methodName === "edit_proposal_timeline" ||
+            operation.methodName === "edit_proposal_timeline" ||
             (operation.methodName === "set_block_height_callback" &&
               operation.caller === "devhub.near") // callback from add_proposal from devhub contract
         )
@@ -157,7 +157,7 @@ async function indexOp(
   }
 
   // Deze ook
-  if (method_name === "edit_proposal_internal") {
+  if (method_name === "edit_proposal") {
     // editor_id
     let labels = args.labels;
     // timestamp
@@ -196,6 +196,16 @@ async function indexOp(
     };
     await createProposalSnapshot(context, proposal_snapshot);
   }
+
+  // TODO
+  if (method_name === "edit_proposal_timeline") {
+    // 1. Get the latest snapshot
+    // Update timeline
+    //
+    // Or
+    //
+    // 2. find the edit_proposal_internal
+  }
 }
 
 async function createDump(
@@ -227,8 +237,8 @@ async function createDump(
     };
     await context.graphql(
       `
-        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_golf_dumps_insert_input!) {
-          insert_thomasguntenaar_near_devhub_proposals_golf_dumps_one(
+        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_hotel_dumps_insert_input!) {
+          insert_thomasguntenaar_near_devhub_proposals_hotel_dumps_one(
             object: $dump
           ) {
             receipt_id
@@ -258,8 +268,8 @@ async function createProposal(context, { id, author_id }) {
     };
     await context.graphql(
       `
-      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_golf_proposals_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_golf_proposals_one(object: $proposal) {id}
+      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_hotel_proposals_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_hotel_proposals_one(object: $proposal) {id}
       }
       `,
       mutationData
@@ -321,8 +331,8 @@ async function createProposalSnapshot(
     };
     await context.graphql(
       `
-      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_golf_proposal_snapshots_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_golf_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
+      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_hotel_proposal_snapshots_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_hotel_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
       }
       `,
       mutationData
