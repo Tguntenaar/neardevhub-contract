@@ -147,9 +147,16 @@ async function indexOp(
     if (err !== null) {
       return;
     }
-    await createProposalSnapshot(context, args.proposal.snapshot);
+
+    await createProposalSnapshot(context, {
+      proposal_id,
+      block_height: blockHeight,
+      ts: blockTimestamp,
+      ...args.proposal.snapshot,
+    });
   }
 
+  // Deze ook
   if (method_name === "edit_proposal_internal") {
     // editor_id
     let labels = args.labels;
@@ -220,8 +227,8 @@ async function createDump(
     };
     await context.graphql(
       `
-        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_foxtrot_dumps_insert_input!) {
-          insert_thomasguntenaar_near_devhub_proposals_foxtrot_dumps_one(
+        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_golf_dumps_insert_input!) {
+          insert_thomasguntenaar_near_devhub_proposals_golf_dumps_one(
             object: $dump
           ) {
             receipt_id
@@ -251,8 +258,8 @@ async function createProposal(context, { id, author_id }) {
     };
     await context.graphql(
       `
-      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_foxtrot_proposals_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_foxtrot_proposals_one(object: $proposal) {id}
+      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_golf_proposals_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_golf_proposals_one(object: $proposal) {id}
       }
       `,
       mutationData
@@ -314,8 +321,8 @@ async function createProposalSnapshot(
     };
     await context.graphql(
       `
-      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_foxtrot_proposal_snapshots_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_foxtrot_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
+      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_golf_proposal_snapshots_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_golf_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
       }
       `,
       mutationData
