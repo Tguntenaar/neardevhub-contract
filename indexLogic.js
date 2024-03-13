@@ -55,9 +55,9 @@ function getDevHubOps(block) {
         }))
         .filter(
           (operation) =>
-            operation.methodName === "edit_proposal" ||
+            // operation.methodName === "edit_proposal" ||
             operation.methodName === "edit_proposal_internal" ||
-            operation.methodName === "edit_proposal_timeline" ||
+            // operation.methodName === "edit_proposal_timeline" ||
             (operation.methodName === "set_block_height_callback" &&
               operation.caller === "devhub.near") // callback from add_proposal from devhub contract
         )
@@ -142,19 +142,15 @@ async function indexOp(
       id: proposal_id,
       author_id: author,
     };
+
     let err = await createProposal(context, proposal);
     if (err !== null) {
       return;
     }
+    await createProposalSnapshot(context, args.proposal.snapshot);
   }
 
-  if (
-    method_name === "add_proposal" || // This is never the case
-    method_name === "edit_proposal" ||
-    method_name === "edit_proposal_internal" ||
-    method_name === "edit_proposal_timeline" ||
-    method_name === "set_block_height_callback"
-  ) {
+  if (method_name === "edit_proposal_internal") {
     // editor_id
     let labels = args.labels;
     // timestamp
@@ -224,8 +220,8 @@ async function createDump(
     };
     await context.graphql(
       `
-        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_echo_dumps_insert_input!) {
-          insert_thomasguntenaar_near_devhub_proposals_echo_dumps_one(
+        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_foxtrot_dumps_insert_input!) {
+          insert_thomasguntenaar_near_devhub_proposals_foxtrot_dumps_one(
             object: $dump
           ) {
             receipt_id
@@ -255,8 +251,8 @@ async function createProposal(context, { id, author_id }) {
     };
     await context.graphql(
       `
-      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_echo_proposals_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_echo_proposals_one(object: $proposal) {id}
+      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_foxtrot_proposals_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_foxtrot_proposals_one(object: $proposal) {id}
       }
       `,
       mutationData
@@ -318,8 +314,8 @@ async function createProposalSnapshot(
     };
     await context.graphql(
       `
-      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_echo_proposal_snapshots_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_echo_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
+      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_foxtrot_proposal_snapshots_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_foxtrot_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
       }
       `,
       mutationData
