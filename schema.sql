@@ -33,7 +33,7 @@ CREATE TABLE
     block_height bigint,
     block_timestamp decimal(20, 0),
     args varchar,
-    caller varchar,
+    author varchar,
     proposal_id bigint
   );
 

@@ -16,6 +16,7 @@ async function getBlock(block: Block) {
   const devhubOps = getDevHubOps(block);
 
   if (devhubOps.length > 0) {
+    console.log({ devhubOps });
     const authorToProposalId = buildAuthorToProposalIdMap(block);
     const blockHeight = block.blockHeight;
     const blockTimestamp = block.header().timestampNanosec;
@@ -54,9 +55,11 @@ function getDevHubOps(block) {
         }))
         .filter(
           (operation) =>
-            operation.methodName === "add_proposal" ||
             operation.methodName === "edit_proposal" ||
-            operation.methodName === "edit_proposal_timeline"
+            operation.methodName === "edit_proposal_internal" ||
+            operation.methodName === "edit_proposal_timeline" ||
+            (operation.methodName === "set_block_height_callback" &&
+              operation.caller === "devhub.near") // callback from add_proposal from devhub contract
         )
         .map((functionCallOperation) => ({
           ...functionCallOperation,
@@ -66,45 +69,33 @@ function getDevHubOps(block) {
     );
 }
 
-// Borsch
+// Borsh
 function buildAuthorToProposalIdMap(block) {
-  console.log({ block });
   const stateChanges = block.streamerMessage.shards
     .flatMap((e) => e.stateChanges)
     .filter(
       (stateChange) =>
-        // stateChange.change.accountId === "devhub.near" &&
+        stateChange.change.accountId === "devhub.near" &&
         stateChange.type === "data_update"
     );
-  console.log({ stateChanges });
-  console.log({
-    hex: stateChanges.map((s) => base64toHex(s.change.keyBase64)),
-  });
+
   const addOrEditProposal = stateChanges
     .map((stateChange) => stateChange.change)
-    // ?? 14th 0x0e ipv 0x05
     .filter((change) => base64toHex(change.keyBase64).startsWith("0e"))
     .map((c) => ({
       k: Buffer.from(c.keyBase64, "base64"),
       v: Buffer.from(c.valueBase64, "base64"),
     }));
-  console.log({ addOrEditProposal });
-
-  console.log({
-    proposalId: addOrEditProposal[0].k.slice(1).readBigUInt64LE(),
-  });
 
   const authorToProposalId = Object.fromEntries(
     addOrEditProposal.map((kv) => {
       return [
-        // Author not the author
-        kv.v.slice(13, 13 + kv.v.slice(9, 13).readUInt32LE()).toString("utf-8"),
-        // ProposalId
+        kv.v.slice(9, 9 + kv.v.slice(5, 9).readUInt32LE()).toString("utf-8"),
         Number(kv.k.slice(1).readBigUInt64LE()),
       ];
     })
   );
-  // console.log({ authorToProposalId });
+
   return authorToProposalId;
 }
 
@@ -116,11 +107,12 @@ async function indexOp(
   context
 ) {
   let receipt_id = op.receiptId;
-  let caller = op.caller;
+
   let args = op.args;
-  console.log(`Indexing ${op.methodName} by ${caller} at ${blockHeight}`);
+  let author = Object.keys(authorToProposalId)[0];
+  console.log(`Indexing ${op.methodName} by ${author} at ${blockHeight}`);
   console.log(authorToProposalId);
-  let proposal_id = authorToProposalId[caller] ?? null;
+  let proposal_id = authorToProposalId[author] ?? null;
   let method_name = op.methodName;
 
   let err = await createDump(context, {
@@ -129,13 +121,14 @@ async function indexOp(
     block_height: blockHeight,
     block_timestamp: blockTimestamp,
     args: JSON.stringify(args),
-    caller,
+    author,
     proposal_id,
   });
   if (err !== null) {
     return;
   }
 
+  // TODO - found out why proposal_id 0 is not
   // currently Query API cannot tell if it's a failed receipt, so we estimate by looking the state changes.
   if (proposal_id === null) {
     console.log(
@@ -144,10 +137,10 @@ async function indexOp(
     return;
   }
 
-  if (method_name === "add_proposal") {
+  if (method_name === "set_block_height_callback") {
     let proposal = {
       id: proposal_id,
-      author_id: caller,
+      author_id: author,
     };
     let err = await createProposal(context, proposal);
     if (err !== null) {
@@ -156,9 +149,11 @@ async function indexOp(
   }
 
   if (
-    method_name === "add_proposal" ||
+    method_name === "add_proposal" || // This is never the case
     method_name === "edit_proposal" ||
-    method_name === "edit_proposal_timeline"
+    method_name === "edit_proposal_internal" ||
+    method_name === "edit_proposal_timeline" ||
+    method_name === "set_block_height_callback"
   ) {
     // editor_id
     let labels = args.labels;
@@ -182,7 +177,7 @@ async function indexOp(
       proposal_id,
       block_height: blockHeight,
       ts: blockTimestamp, // Timestamp ??
-      editor_id: caller,
+      editor_id: author,
       labels,
       name,
       category,
@@ -208,7 +203,7 @@ async function createDump(
     block_height,
     block_timestamp,
     args,
-    caller,
+    author,
     proposal_id,
   }
 ) {
@@ -218,7 +213,7 @@ async function createDump(
     block_height,
     block_timestamp,
     args,
-    caller,
+    author,
     proposal_id,
   };
   try {
@@ -229,8 +224,8 @@ async function createDump(
     };
     await context.graphql(
       `
-        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_alpha_dumps_insert_input!) {
-          insert_thomasguntenaar_near_devhub_proposals_alpha_dumps_one(
+        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_echo_dumps_insert_input!) {
+          insert_thomasguntenaar_near_devhub_proposals_echo_dumps_one(
             object: $dump
           ) {
             receipt_id
@@ -240,12 +235,12 @@ async function createDump(
       mutationData
     );
     console.log(
-      `Dump ${caller} ${method_name} proposal ${proposal_id} has been added to the database`
+      `Dump ${author} ${method_name} proposal ${proposal_id} has been added to the database`
     );
     return null;
   } catch (e) {
     console.log(
-      `Error creating ${caller} ${method_name} proposal ${proposal_id}: ${e}`
+      `Error creating ${author} ${method_name} proposal ${proposal_id}: ${e}`
     );
     return e;
   }
@@ -260,8 +255,8 @@ async function createProposal(context, { id, author_id }) {
     };
     await context.graphql(
       `
-      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_alpha_proposals_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_alpha_proposals_one(object: $proposal) {id}
+      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_echo_proposals_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_echo_proposals_one(object: $proposal) {id}
       }
       `,
       mutationData
@@ -323,8 +318,8 @@ async function createProposalSnapshot(
     };
     await context.graphql(
       `
-      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_alpha_proposal_snapshots_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_alpha_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
+      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_echo_proposal_snapshots_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_echo_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
       }
       `,
       mutationData
