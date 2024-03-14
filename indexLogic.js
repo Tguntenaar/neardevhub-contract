@@ -197,14 +197,32 @@ async function indexOp(
     await createProposalSnapshot(context, proposal_snapshot);
   }
 
-  // TODO
   if (method_name === "edit_proposal_timeline") {
-    // 1. Get the latest snapshot
-    // Update timeline
-    //
-    // Or
-    //
-    // 2. find the edit_proposal_internal
+    let latest_proposal_snapshot = await queryLatestSnapshot(proposal_id);
+
+    if (latest_proposal_snapshot !== null) {
+      let proposal_snapshot = {
+        proposal_id,
+        block_height: blockHeight,
+        ts: blockTimestamp,
+        editor_id: author,
+        labels: latest_proposal_snapshot.labels,
+        name: latest_proposal_snapshot.name,
+        category: latest_proposal_snapshot.category,
+        summary: latest_proposal_snapshot.summary,
+        description: latest_proposal_snapshot.description,
+        linked_proposals: latest_proposal_snapshot.linked_proposals,
+        requested_sponsorship_usd_amount:
+          latest_proposal_snapshot.requested_sponsorship_usd_amount,
+        requested_sponsorship_paid_in_currency:
+          latest_proposal_snapshot.requested_sponsorship_paid_in_currency,
+        requested_sponsor: latest_proposal_snapshot.requested_sponsor,
+        receiver_account: latest_proposal_snapshot.receiver_account,
+        supervisor: latest_proposal_snapshot.supervisor,
+        timeline: args.timeline, // TimelineStatus
+      };
+      await createProposalSnapshot(context, proposal_snapshot);
+    }
   }
 }
 
@@ -237,8 +255,8 @@ async function createDump(
     };
     await context.graphql(
       `
-        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_hotel_dumps_insert_input!) {
-          insert_thomasguntenaar_near_devhub_proposals_hotel_dumps_one(
+        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_india_dumps_insert_input!) {
+          insert_thomasguntenaar_near_devhub_proposals_india_dumps_one(
             object: $dump
           ) {
             receipt_id
@@ -268,8 +286,8 @@ async function createProposal(context, { id, author_id }) {
     };
     await context.graphql(
       `
-      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_hotel_proposals_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_hotel_proposals_one(object: $proposal) {id}
+      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_india_proposals_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_india_proposals_one(object: $proposal) {id}
       }
       `,
       mutationData
@@ -287,7 +305,7 @@ async function createProposalSnapshot(
   {
     proposal_id,
     block_height,
-    ts, // Timestamp ??
+    ts, // Timestamp
     editor_id,
     labels,
     name,
@@ -331,8 +349,8 @@ async function createProposalSnapshot(
     };
     await context.graphql(
       `
-      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_hotel_proposal_snapshots_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_hotel_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
+      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_india_proposal_snapshots_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_india_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
       }
       `,
       mutationData
@@ -348,3 +366,53 @@ async function createProposalSnapshot(
     return e;
   }
 }
+
+const queryLatestSnapshot = async (proposal_id) => {
+  const queryData = {
+    proposal_id,
+  };
+  try {
+    const result = await context.graphql(
+      `
+      query GetLatestSnapshot($proposal_id: Int!) {
+        thomasguntenaar_near_devhub_proposals_india_proposal_snapshots(where: {proposal_id: {_eq: $proposal_id}}, order_by: {ts: desc}, limit: 1) {
+          proposal_id
+          block_height
+          ts
+          editor_id
+          labels
+          name
+          category
+          summary
+          description
+          linked_proposals
+          requested_sponsorship_usd_amount
+          requested_sponsorship_paid_in_currency
+          requested_sponsor
+          receiver_account
+          supervisor
+          timeline
+        }
+      }
+      `,
+      queryData
+    );
+
+    if (
+      result.data.thomasguntenaar_near_devhub_proposals_india_proposal_snapshots
+        .length > 0
+    ) {
+      const latestSnapshot =
+        result.data
+          .thomasguntenaar_near_devhub_proposals_india_proposal_snapshots[0];
+      console.log("Latest Proposal Snapshot:", latestSnapshot);
+      return latestSnapshot;
+    } else {
+      console.log("No snapshot found for proposal_id:", proposal_id);
+      return null;
+    }
+  } catch (e) {
+    console.log("Error retrieving latest snapshot:", e);
+    return null;
+  }
+};
