@@ -202,7 +202,8 @@ async function indexOp(
 
     if (Object.keys(result).length !== 0) {
       let latest_proposal_snapshot =
-        result.thomasguntenaar_near_devhub_proposals_lima_proposal_snapshots[0];
+        result
+          .thomasguntenaar_near_devhub_proposals_mining_proposal_snapshots[0];
       console.log({
         method: "edit_proposal_timeline",
         latest_proposal_snapshot,
@@ -263,8 +264,8 @@ async function createDump(
     };
     await context.graphql(
       `
-        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_lima_dumps_insert_input!) {
-          insert_thomasguntenaar_near_devhub_proposals_lima_dumps_one(
+        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_mining_dumps_insert_input!) {
+          insert_thomasguntenaar_near_devhub_proposals_mining_dumps_one(
             object: $dump
           ) {
             receipt_id
@@ -294,8 +295,8 @@ async function createProposal(context, { id, author_id }) {
     };
     await context.graphql(
       `
-      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_lima_proposals_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_lima_proposals_one(object: $proposal) {id}
+      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_mining_proposals_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_mining_proposals_one(object: $proposal) {id}
       }
       `,
       mutationData
@@ -357,8 +358,8 @@ async function createProposalSnapshot(
     };
     await context.graphql(
       `
-      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_lima_proposal_snapshots_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_lima_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
+      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_mining_proposal_snapshots_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_mining_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
       }
       `,
       mutationData
@@ -383,7 +384,7 @@ const queryLatestSnapshot = async (proposal_id) => {
     const result = await context.graphql(
       `
       query GetLatestSnapshot($proposal_id: Int!) {
-        thomasguntenaar_near_devhub_proposals_lima_proposal_snapshots(where: {proposal_id: {_eq: $proposal_id}}, order_by: {ts: desc}, limit: 1) {
+        thomasguntenaar_near_devhub_proposals_mining_proposal_snapshots(where: {proposal_id: {_eq: $proposal_id}}, order_by: {ts: desc}, limit: 1) {
           proposal_id
           block_height
           ts

@@ -78,6 +78,8 @@ SELECT
   ps.editor_id,
   ps.labels,
   ps.name,
+  ps.category,
+  ps.summary,
   ps.description,
   ps.linked_proposals,
   ps.requested_sponsorship_usd_amount,
