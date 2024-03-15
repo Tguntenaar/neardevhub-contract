@@ -152,6 +152,7 @@ async function indexOp(
       proposal_id,
       block_height: blockHeight,
       ts: blockTimestamp,
+      views: 1,
       ...args.proposal.snapshot,
     });
   }
@@ -176,10 +177,11 @@ async function indexOp(
     let supervisor = args.body.supervisor;
     let timeline = args.body.timeline;
 
+    let result = await queryLatestViews(proposal_id);
     let proposal_snapshot = {
       proposal_id,
       block_height: blockHeight,
-      ts: blockTimestamp, // Timestamp ??
+      ts: blockTimestamp, // Timestamp
       editor_id: author,
       labels,
       name,
@@ -193,6 +195,10 @@ async function indexOp(
       receiver_account, // AccountId
       supervisor, // Option
       timeline, // TimelineStatus
+      views:
+        result
+          .thomasguntenaar_near_devhub_proposals_november_proposal_snapshots[0]
+          .views,
     };
     await createProposalSnapshot(context, proposal_snapshot);
   }
@@ -203,7 +209,7 @@ async function indexOp(
     if (Object.keys(result).length !== 0) {
       let latest_proposal_snapshot =
         result
-          .thomasguntenaar_near_devhub_proposals_mining_proposal_snapshots[0];
+          .thomasguntenaar_near_devhub_proposals_november_proposal_snapshots[0];
       console.log({
         method: "edit_proposal_timeline",
         latest_proposal_snapshot,
@@ -227,10 +233,11 @@ async function indexOp(
         receiver_account: latest_proposal_snapshot.receiver_account,
         supervisor: latest_proposal_snapshot.supervisor,
         timeline: args.timeline, // TimelineStatus
+        views: latest_proposal_snapshot.views + 1,
       };
       await createProposalSnapshot(context, proposal_snapshot);
     } else {
-      console.log("Empty object latest_proposal_snapshot result");
+      console.log("Empty object latest_proposal_snapshot result", { result });
     }
   }
 }
@@ -264,8 +271,8 @@ async function createDump(
     };
     await context.graphql(
       `
-        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_mining_dumps_insert_input!) {
-          insert_thomasguntenaar_near_devhub_proposals_mining_dumps_one(
+        mutation CreateDump($dump: thomasguntenaar_near_devhub_proposals_november_dumps_insert_input!) {
+          insert_thomasguntenaar_near_devhub_proposals_november_dumps_one(
             object: $dump
           ) {
             receipt_id
@@ -295,8 +302,8 @@ async function createProposal(context, { id, author_id }) {
     };
     await context.graphql(
       `
-      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_mining_proposals_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_mining_proposals_one(object: $proposal) {id}
+      mutation CreateProposal($proposal: thomasguntenaar_near_devhub_proposals_november_proposals_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_november_proposals_one(object: $proposal) {id}
       }
       `,
       mutationData
@@ -328,6 +335,7 @@ async function createProposalSnapshot(
     receiver_account, // AccountId
     supervisor, // Option
     timeline, // TimelineStatus
+    views,
   }
 ) {
   const proposal_snapshot = {
@@ -349,6 +357,7 @@ async function createProposalSnapshot(
     requested_sponsor, // AccountId
     receiver_account, // AccountId
     supervisor, // Option<AccountId>
+    views,
     timeline: JSON.stringify(timeline), // TimelineStatus
   };
   try {
@@ -358,8 +367,8 @@ async function createProposalSnapshot(
     };
     await context.graphql(
       `
-      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_mining_proposal_snapshots_insert_input!) {
-        insert_thomasguntenaar_near_devhub_proposals_mining_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
+      mutation CreateProposalSnapshot($proposal_snapshot: thomasguntenaar_near_devhub_proposals_november_proposal_snapshots_insert_input!) {
+        insert_thomasguntenaar_near_devhub_proposals_november_proposal_snapshots_one(object: $proposal_snapshot) {proposal_id, block_height}
       }
       `,
       mutationData
@@ -384,7 +393,7 @@ const queryLatestSnapshot = async (proposal_id) => {
     const result = await context.graphql(
       `
       query GetLatestSnapshot($proposal_id: Int!) {
-        thomasguntenaar_near_devhub_proposals_mining_proposal_snapshots(where: {proposal_id: {_eq: $proposal_id}}, order_by: {ts: desc}, limit: 1) {
+        thomasguntenaar_near_devhub_proposals_november_proposal_snapshots(where: {proposal_id: {_eq: $proposal_id}}, order_by: {ts: desc}, limit: 1) {
           proposal_id
           block_height
           ts
@@ -401,6 +410,30 @@ const queryLatestSnapshot = async (proposal_id) => {
           receiver_account
           supervisor
           timeline
+        }
+      }
+      `,
+      queryData
+    );
+    console.log({ result });
+    return result;
+  } catch (e) {
+    console.log("Error retrieving latest snapshot:", e);
+    return null;
+  }
+};
+
+const queryLatestViews = async (proposal_id) => {
+  const queryData = {
+    proposal_id,
+  };
+  try {
+    const result = await context.graphql(
+      `
+      query GetLatestSnapshot($proposal_id: Int!) {
+        thomasguntenaar_near_devhub_proposals_november_proposal_snapshots(where: {proposal_id: {_eq: $proposal_id}}, order_by: {ts: desc}, limit: 1) {
+          proposal_id
+          views
         }
       }
       `,

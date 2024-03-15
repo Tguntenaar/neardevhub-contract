@@ -23,6 +23,7 @@ CREATE TABLE
     receiver_account varchar,
     supervisor varchar,
     timeline jsonb,
+    views int,
     primary key (proposal_id, ts)
   );
 
@@ -44,6 +45,9 @@ CREATE INDEX
   idx_proposal_snapshots_proposal_id ON proposal_snapshots (proposal_id);
 
 CREATE INDEX
+  idx_proposal_snapshots_category ON proposal_snapshots (category);
+
+CREATE INDEX
   idx_proposal_snapshots_ts ON proposal_snapshots (ts);
 
 CREATE INDEX
@@ -59,6 +63,9 @@ CREATE INDEX
   idx_fulltext_proposal_snapshots_summary ON proposal_snapshots USING gin (to_tsvector('english', summary));
 
 CREATE INDEX
+  idx_fulltext_proposal_snapshots_timeline ON proposal_snapshots USING gin (to_tsvector('english', timeline));
+
+CREATE INDEX
   idx_fulltext_proposal_snapshots_name ON proposal_snapshots USING gin (to_tsvector('english', name));
 
 CREATE INDEX
@@ -66,6 +73,9 @@ CREATE INDEX
 
 CREATE INDEX
   idx_proposal_snapshots_sponsorship_receiver_account ON proposal_snapshots (receiver_account);
+
+CREATE INDEX
+  idx_proposal_snapshots_views ON proposal_snapshots (views);
 
 
 CREATE VIEW
@@ -87,7 +97,8 @@ SELECT
   ps.requested_sponsor,
   ps.receiver_account,
   ps.supervisor,
-  ps.timeline
+  ps.timeline,
+  ps.views
 FROM
   proposals p
   INNER JOIN (
